@@ -28,7 +28,7 @@ Resources:
         - IpProtocol: tcp
           FromPort: 22
           ToPort: 22
-          CidrIp: 83.61.149.87/32
+          CidrIp: 83.42.127.103/32
   EC2InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -126,19 +126,6 @@ Resources:
             sudo wget http://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo -O /etc/yum.repos.d/epel-apache-maven.repo
             sudo sed -i s/\$releasever/6/g /etc/yum.repos.d/epel-apache-maven.repo
             sudo yum install -y apache-maven
-
-            # node/npm
-            sudo yum install -y gcc-c++ make
-            curl -sL https://rpm.nodesource.com/setup_8.x | sudo -E bash -
-            sudo yum install -y nodejs
-
-            # cypress
-            sudo npm install cypress --save-dev
-            sudo wget https://s3.amazonaws.com/menpedro-cypress/cypress_AMI_deps_install.sh
-            sudo chmod +x cypress_AMI_deps_install.sh
-            sudo ./cypress_AMI_deps_install.sh
-            sudo chmod -R 777 /tmp/node_modules/cypress
-            cd /tmp
 
             # jenkins
             sudo wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins.io/redhat/jenkins.repo
