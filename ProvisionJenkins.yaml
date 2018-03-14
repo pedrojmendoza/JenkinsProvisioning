@@ -1,0 +1,209 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Provision Jenkins instance
+
+Parameters:
+  KeyName:
+    Description: Name of EC2 keys to be used
+    Type: String
+    Default: menpedro-instances-key-pair
+
+Resources:
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: allow connections from specified CIDR ranges
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 193.127.221.5/32
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 72.21.198.66/32
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 83.61.149.87/32
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        -
+          PolicyName: JenkinsPolicy
+          PolicyDocument:
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - ssm:GetParameters
+                Resource:
+                  - arn:aws:ssm:*:*:parameter/*
+              -
+                Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource:
+                  - arn:aws:kms:*:*:key/*
+              -
+                Effect: Allow
+                Action:
+                  - ecr:*
+                  - ecs:*
+                  - s3:*
+                  - logs:*
+                  - cloudformation:*
+                Resource:
+                  - "*"
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+  EC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+        IamInstanceProfile: !Ref EC2InstanceProfile
+        AvailabilityZone: us-east-1c
+        ImageId: ami-97785bed
+        KeyName: !Ref KeyName
+        InstanceType: m4.xlarge
+        SecurityGroups:
+          - !Ref EC2SecurityGroup
+        BlockDeviceMappings:
+          -
+            DeviceName: /dev/sdm
+            Ebs:
+              VolumeType: gp2
+              VolumeSize: 20
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash
+            cd /tmp
+            sudo yum update -y
+
+            # SSM agent
+            sudo yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+
+            # jdk
+            sudo yum install -y java-1.8.0-openjdk-devel
+            sudo /usr/sbin/alternatives --set java /usr/lib/jvm/jre-1.8.0-openjdk.x86_64/bin/java
+            sudo /usr/sbin/alternatives --set javac /usr/lib/jvm/java-1.8.0-openjdk.x86_64/bin/javac
+
+            # jq
+            sudo yum install -y jq
+
+            # git
+            sudo yum install -y git
+
+            # gatling
+            sudo wget https://repo1.maven.org/maven2/io/gatling/highcharts/gatling-charts-highcharts-bundle/2.3.1/gatling-charts-highcharts-bundle-2.3.1-bundle.zip
+            unzip -q -o gatling-charts-highcharts-bundle-2.3.1-bundle.zip
+            sudo chmod +x /tmp/gatling-charts-highcharts-bundle-2.3.1/bin/gatling.sh
+            sudo ln -s /tmp/gatling-charts-highcharts-bundle-2.3.1/bin/gatling.sh /usr/bin/gatling.sh
+            sudo chmod -R 777 /tmp/gatling-charts-highcharts-bundle-2.3.1
+
+            # docker
+            sudo yum install -y docker
+            sudo usermod -a -G docker jenkins
+            sudo usermod -a -G docker ec2-user
+            sudo service docker start
+
+            # maven
+            sudo wget http://repos.fedorapeople.org/repos/dchen/apache-maven/epel-apache-maven.repo -O /etc/yum.repos.d/epel-apache-maven.repo
+            sudo sed -i s/\$releasever/6/g /etc/yum.repos.d/epel-apache-maven.repo
+            sudo yum install -y apache-maven
+
+            # node/npm
+            sudo yum install -y gcc-c++ make
+            curl -sL https://rpm.nodesource.com/setup_8.x | sudo -E bash -
+            sudo yum install -y nodejs
+
+            # cypress
+            sudo npm install cypress --save-dev
+            sudo wget https://s3.amazonaws.com/menpedro-cypress/cypress_AMI_deps_install.sh
+            sudo chmod +x cypress_AMI_deps_install.sh
+            sudo ./cypress_AMI_deps_install.sh
+            sudo chmod -R 777 /tmp/node_modules/cypress
+            cd /tmp
+
+            # jenkins
+            sudo wget -O /etc/yum.repos.d/jenkins.repo http://pkg.jenkins.io/redhat/jenkins.repo
+            sudo rpm --import https://pkg.jenkins.io/redhat/jenkins.io.key
+            sudo yum install jenkins -y
+            sudo service jenkins start
+
+            # permissions to docker for jenkins user
+            sudo usermod -a -G docker jenkins
+
+            # Wait for initial Jenkins admin password to be created
+            while [ ! -f /var/lib/jenkins/secrets/initialAdminPassword ]
+            do
+              sleep 2
+            done
+            # and an extra delay to let Jenkins get itself sorted out
+            sleep 10
+
+            # The Jenkins CLI tool
+            JCLI="java -jar /var/cache/jenkins/war/WEB-INF/jenkins-cli.jar -s http://localhost:8080"
+
+            # Install Jenkins plugins
+            $JCLI -auth admin:`cat /var/lib/jenkins/secrets/initialAdminPassword` install-plugin blueocean
+            sleep 10
+
+            # Groovy script to update jenkins env variables to include GATLING_HOME
+            read -r -d '' GROOVY_SET_ENV << EOM_GROOVY_SET_ENV
+            import hudson.slaves.EnvironmentVariablesNodeProperty
+            import jenkins.model.Jenkins
+            instance = Jenkins.getInstance()
+            globalNodeProperties = instance.getGlobalNodeProperties()
+            envVarsNodePropertyList = globalNodeProperties.getAll(EnvironmentVariablesNodeProperty.class)
+            newEnvVarsNodeProperty = null
+            envVars = null
+            if ( envVarsNodePropertyList == null || envVarsNodePropertyList.size() == 0 ) {
+              newEnvVarsNodeProperty = new EnvironmentVariablesNodeProperty();
+              globalNodeProperties.add(newEnvVarsNodeProperty)
+              envVars = newEnvVarsNodeProperty.getEnvVars()
+            } else {
+              envVars = envVarsNodePropertyList.get(0).getEnvVars()
+            }
+            envVars.put("GATLING_HOME", "/tmp/gatling-charts-highcharts-bundle-2.3.1")
+            instance.save()
+            EOM_GROOVY_SET_ENV
+            echo "$GROOVY_SET_ENV" | $JCLI -auth admin:`cat /var/lib/jenkins/secrets/initialAdminPassword` groovy =
+            sleep 10
+
+            # Extract region
+            REGION=`curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region`
+
+            # Groovy script to update jenkins admin password
+            read -r -d '' GROOVY_SET_PASS << EOM_GROOVY_SET_PASS
+            import jenkins.model.*
+            jenkins.model.Jenkins.instance.securityRealm.createAccount('admin','`aws ssm get-parameters --name JenkinsAdminPass --with-decryption --region $REGION --query 'Parameters[0].Value' --output text`')
+            EOM_GROOVY_SET_PASS
+            echo "$GROOVY_SET_PASS" | $JCLI -auth admin:`cat /var/lib/jenkins/secrets/initialAdminPassword` groovy =
+            sleep 10
+
+            # Restart Jenkins
+            sudo service jenkins restart
+        Tags:
+          -
+            Key: Name
+            Value: Jenkins
+Outputs:
+  JenkinsPublicDNS:
+    Description: Jenkins public DNS
+    Value: !GetAtt EC2Instance.PublicDnsName
