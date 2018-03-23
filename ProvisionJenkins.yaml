@@ -89,10 +89,10 @@ Resources:
           - !Ref EC2SecurityGroup
         BlockDeviceMappings:
           -
-            DeviceName: /dev/sdm
+            DeviceName: /dev/xvda
             Ebs:
               VolumeType: gp2
-              VolumeSize: 100
+              VolumeSize: 200
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
