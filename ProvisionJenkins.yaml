@@ -29,6 +29,10 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: 83.42.127.103/32
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 195.89.105.30/32
   EC2InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -88,7 +92,7 @@ Resources:
             DeviceName: /dev/sdm
             Ebs:
               VolumeType: gp2
-              VolumeSize: 20
+              VolumeSize: 100
         UserData:
           Fn::Base64: !Sub |
             #!/bin/bash
