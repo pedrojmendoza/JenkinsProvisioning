@@ -21,18 +21,6 @@ Resources:
           FromPort: 22
           ToPort: 22
           CidrIp: 193.127.221.5/32
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 72.21.198.66/32
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 83.42.127.103/32
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: 195.89.105.30/32
   EC2InstanceRole:
     Type: AWS::IAM::Role
     Properties:
@@ -70,6 +58,7 @@ Resources:
                   - s3:*
                   - logs:*
                   - cloudformation:*
+                  - devicefarm:*
                 Resource:
                   - "*"
   EC2InstanceProfile:
