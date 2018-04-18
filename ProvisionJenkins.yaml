@@ -102,13 +102,6 @@ Resources:
             # git
             sudo yum install -y git
 
-            # gatling
-            sudo wget https://repo1.maven.org/maven2/io/gatling/highcharts/gatling-charts-highcharts-bundle/2.3.1/gatling-charts-highcharts-bundle-2.3.1-bundle.zip
-            unzip -q -o gatling-charts-highcharts-bundle-2.3.1-bundle.zip
-            sudo chmod +x /tmp/gatling-charts-highcharts-bundle-2.3.1/bin/gatling.sh
-            sudo ln -s /tmp/gatling-charts-highcharts-bundle-2.3.1/bin/gatling.sh /usr/bin/gatling.sh
-            sudo chmod -R 777 /tmp/gatling-charts-highcharts-bundle-2.3.1
-
             # docker
             sudo yum install -y docker
             sudo usermod -a -G docker jenkins
@@ -142,28 +135,6 @@ Resources:
 
             # Install Jenkins plugins
             $JCLI -auth admin:`cat /var/lib/jenkins/secrets/initialAdminPassword` install-plugin blueocean
-            sleep 10
-
-            # Groovy script to update jenkins env variables to include GATLING_HOME
-            read -r -d '' GROOVY_SET_ENV << EOM_GROOVY_SET_ENV
-            import hudson.slaves.EnvironmentVariablesNodeProperty
-            import jenkins.model.Jenkins
-            instance = Jenkins.getInstance()
-            globalNodeProperties = instance.getGlobalNodeProperties()
-            envVarsNodePropertyList = globalNodeProperties.getAll(EnvironmentVariablesNodeProperty.class)
-            newEnvVarsNodeProperty = null
-            envVars = null
-            if ( envVarsNodePropertyList == null || envVarsNodePropertyList.size() == 0 ) {
-              newEnvVarsNodeProperty = new EnvironmentVariablesNodeProperty();
-              globalNodeProperties.add(newEnvVarsNodeProperty)
-              envVars = newEnvVarsNodeProperty.getEnvVars()
-            } else {
-              envVars = envVarsNodePropertyList.get(0).getEnvVars()
-            }
-            envVars.put("GATLING_HOME", "/tmp/gatling-charts-highcharts-bundle-2.3.1")
-            instance.save()
-            EOM_GROOVY_SET_ENV
-            echo "$GROOVY_SET_ENV" | $JCLI -auth admin:`cat /var/lib/jenkins/secrets/initialAdminPassword` groovy =
             sleep 10
 
             # Extract region
