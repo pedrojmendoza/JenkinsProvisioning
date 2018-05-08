@@ -59,6 +59,7 @@ Resources:
                   - logs:*
                   - cloudformation:*
                   - devicefarm:*
+                  - sts:AssumeRole
                 Resource:
                   - "*"
   EC2InstanceProfile:
